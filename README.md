@@ -10,7 +10,7 @@
 
 ## 当前版本
 
-**[下载 OS44 QPaCE FORCE 9838](https://github.com/hgn284/xiaomi_17pro_max_sm8850/releases/tag/os44-qpace-force-9838)**
+**当前已交付私测版本：OS44 QPaCE FORCE 9838。GitHub Release 大附件上传遇到超时，暂未公开发布。**
 
 | 项目 | 状态 |
 | --- | --- |
@@ -19,7 +19,7 @@
 | SUSFS | 2.3.0 |
 | 压缩路径 | `qpace-canoe`：硬件 COMP＋硬件 DECOMP，无软件压缩回退 |
 | 启动反馈 | 使用者报告正常启动、当前运行正常 |
-| zRAM 反馈 | 系统监控显示 `qpace-canoe`，16384 MB，约 3516 MB 已用 |
+| zRAM 反馈 | 系统监控显示 `qpace-canoe`，16384 MB，最新反馈约 5892 MB 已用（36%） |
 | 刷写范围 | 仅当前槽 boot；不写 vendor_boot、vbmeta、init_boot、dtbo 或原厂模块分区 |
 | 全厂商源码 | 重建进行中，尚不是完整原厂驱动替代 |
 
@@ -27,7 +27,7 @@
 
 ## 本项目的主要内容
 
-- 提供当前已交付内核的完整源码快照及构建配置，不只提供刷机包。
+- 公开当前内核相关源码、构建配置与重建研究代码；完整源码快照已准备，GitHub 大附件上传尚未完成。
 - 保持原厂模块加载边界，推进 ABI／BTF 兼容，不要求替换 vendor_boot 中的 IOMMU 依赖。
 - 提供本地编译入口和手动 GitHub Actions；使用冻结的 AOSP Clang 19 与 Rust 1.82 工具链。
 - 分开维护已经交付的内核、尚未接入的系统配置，以及实验性厂商驱动重建源码。
@@ -41,9 +41,12 @@
 - [x] 初始化 zRAM 时强制选择 `qpace-canoe`，不回退软件压缩。
 - [x] 当前槽 boot 安装、安装前备份，不自动重启。
 - [x] 使用者报告正常运行，监控显示 QPaCE zRAM 已作为 swap 使用。
-- [x] 公开完整交付源码快照、局部研究源码和版本说明。
+- [x] 公开相关源码、研究源码、构建入口和版本说明。
+- [ ] 上传完整交付源码归档与刷机包 Release 附件（当前网络超时）。
 
 ## 下一步
+
+- [ ] **下一版算法显示名改为 `qpace-hgn284`**；注册名、强制选择和别名的源码已改好，见 [名称补丁](qpace_patch/next/README.md)，尚未编译／部署。
 
 - [ ] **下一版：扩展选 6／8／12／16 GB，zRAM 对应 6／8／12／16 GB。** 配置数值已准备，早期无损覆盖尚待接入；**9838 不含此改动**。
 - [ ] 完善 QPaCE 的长期运行、负载和电源管理反馈。
@@ -54,7 +57,7 @@
 
 ## 下载与使用
 
-在 [Releases](https://github.com/hgn284/xiaomi_17pro_max_sm8850/releases) 下载 `OS44_QPACE_FORCE_9838.zip`，沿用支持本项目 boot 安装器的 Root 刷写工具，成功后手动重启。**不再执行旧 QPaCE 启用脚本。**
+**GitHub Release 目前仍为未发布草稿：大附件传输未完成，暂时没有公开下载链接。** 已收到原9838包的用户可继续使用原包，无需重刷；后续附件发布到 [Releases](https://github.com/hgn284/xiaomi_17pro_max_sm8850/releases)。安装方式见下方说明，**不再执行旧 QPaCE 启用脚本。**
 
 安装器保留原有的槽位识别、boot 备份及写入事务处理，不附加诊断流程。详情见 [安装说明](docs/INSTALL.md)。其他系统版本与机型未在本项目声明支持。
 
@@ -66,7 +69,9 @@ cd xiaomi_17pro_max_sm8850
 bash local/builder_6.12.69.sh
 ```
 
-也可在 **Actions → Build Xiaomi 17 Pro Max → Run workflow** 手动触发。仅编译并上传构建产物，不自动发布、不刷手机。详见 [构建说明](docs/BUILD.md)。
+**目前完整源码归档尚未上传成功，以上自动准备入口还不能从 GitHub 获取全部输入。**
+
+附件补齐后，也可在 **Actions → Build Xiaomi 17 Pro Max → Run workflow** 手动触发。仅编译并上传构建产物，不自动发布、不刷手机。详见 [构建说明](docs/BUILD.md)。
 
 本仓库发布时**没有重新编译或运行新测试**。9838 来自既有成功构建；移植到 GitHub runner 的入口尚未执行，不能把“有工作流”写成“云端构建已通过”。
 
@@ -84,7 +89,7 @@ manifest/          源码／工具链／发布版本锁定清单
 docs/              安装、构建、状态及来源说明
 ```
 
-完整 `kernel/` 与 `root_git/` 源码由 Release 的 `OS44_FORCE_9838_source.tar.gz` 提供，本地脚本按清单下载到 `work/`。未上传整个工作区、私有日志、手机截图或厂商固件镜像。
+完整 `kernel/` 与 `root_git/` 源码计划由 Release 的 `OS44_FORCE_9838_source.tar.gz` 提供（归档已生成，上传未完成），本地脚本按清单下载到 `work/`。未上传整个工作区、私有日志、手机截图或厂商固件镜像。
 
 ## 鸣谢与来源
 

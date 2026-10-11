@@ -1,0 +1,37 @@
+--- a/drivers/base/os44_qpace_policy.h
++++ b/drivers/base/os44_qpace_policy.h
+@@ -18,7 +18,7 @@
+                                     const char **buf, size_t *count)
+ {
+ #if IS_ENABLED(CONFIG_OS44_QPACE)
+- static const char codec[] = "qpace-canoe\n";
++ static const char codec[] = "qpace-hgn284\n";
+  const struct attribute_group **groups;
+  struct attribute **attributes;
+  struct device_attribute *algorithm = NULL;
+@@ -46,7 +46,7 @@
+  if (ret < 0) return ret;
+  ret = os44_qpace_wait_ready();
+  if (ret) return ret;
+- dev_info(dev, "OS44 forced qpace-canoe native hardware backend\n");
++ dev_info(dev, "OS44 forced qpace-hgn284 native hardware backend\n");
+ #endif
+  return 0;
+ }
+--- a/drivers/soc/qcom/os44-qpace/qpace_crypto.c
++++ b/drivers/soc/qcom/os44-qpace/qpace_crypto.c
+@@ -95,7 +95,7 @@
+  return 0;
+ }
+ static struct crypto_alg qpace_comp_alg = {
+- .cra_name = "qpace-canoe", .cra_driver_name = "qpace-canoe-native-hw",
++ .cra_name = "qpace-hgn284", .cra_driver_name = "qpace-hgn284-native-hw",
+  .cra_flags = CRYPTO_ALG_TYPE_COMPRESS,
+  .cra_ctxsize = sizeof(struct qpace_comp_ctx), .cra_module = THIS_MODULE,
+  .cra_init = qpace_comp_init, .cra_exit = qpace_comp_exit,
+@@ -108,4 +108,4 @@
+ module_exit(qpace_comp_unregister);
+ MODULE_LICENSE("GPL");
+ MODULE_DESCRIPTION("OS44 forced native QPaCE hardware COMP/DECOMP trial9838");
+-MODULE_ALIAS_CRYPTO("qpace-canoe");
++MODULE_ALIAS_CRYPTO("qpace-hgn284");

@@ -2,6 +2,8 @@
 
 ## 输入
 
+**发布附件上传尚未完成：完整源码归档目前不能从 GitHub 下载。构建入口已整理，但自动获取依赖仍被此项阻塞。**
+
 - Linux x86_64宿主机、Python3.12、git、make、bc、bison、flex、libelf/libssl/zlib开发包；建议16GB以上内存和充足临时磁盘。
 - `manifest/source.json` 锁定的完整9838源码快照（kernel + 原样BakaSU源码，不含构建缓存）。
 - `manifest/toolchains.json` 锁定的AOSP Clang19、Rust1.82及构建工具。
@@ -23,8 +25,6 @@ bash local/builder_6.12.69.sh
 ## GitHub Actions
 
 工作流仅 `workflow_dispatch` 手动触发。默认2个并发编译任务，产物为Image及构建信息，不自动出新的刷机包、不自动创建Release。
-
-`Assemble source release asset (transfer only)` 是大附件分片传输后的拼接入口，只恢复原样源码归档并删除临时分片，不编译内核或执行内核测试；普通下载与构建不需要运行它。
 
 **首次公开时没有运行云端构建或新测试。** 9838既有成功构建是独立源码副本上的增量编译＋重新链接，不是此次新进行的清洁构建。便携入口首次执行可能暴露宿主环境差异；失败日志应保留，不应删检查、复制CRC或伪造成功。
 

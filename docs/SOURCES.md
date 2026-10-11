@@ -2,7 +2,7 @@
 
 ## 对应交付源码
 
-Release `os44-qpace-force-9838` 附 `OS44_FORCE_9838_source.tar.gz`，包含构建9838使用的完整内核工作树与BakaSU源码。保留上游LICENSES、COPYING、版权头和SPDX。源码归档不含.git历史、编译缓存、手机日志或个人签名凭据；Linux上游自测目录中的公开测试夹具原样保留。
+待发布的 Release `os44-qpace-force-9838` 计划附 `OS44_FORCE_9838_source.tar.gz`，包含构建9838使用的完整内核工作树与BakaSU源码。归档已在本地准备，但上传遇到超时，尚未公开提供下载。保留上游LICENSES、COPYING、版权头和SPDX。源码归档不含.git历史、编译缓存、手机日志或个人签名凭据；Linux上游自测目录中的公开测试夹具原样保留。
 
 Linux/Android、BakaSU、SUSFS及第三方文件各自许可证仍有效。本仓库不以一个新许可证覆盖这些既有文件。新增构建入口与研究代码按其SPDX标识或目录说明处理。
 
