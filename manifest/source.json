@@ -1,0 +1,13 @@
+{
+  "archive": "OS44_FORCE_9838_source.tar.gz",
+  "url": "https://github.com/hgn284/xiaomi_17pro_max_sm8850/releases/download/os44-qpace-force-9838/OS44_FORCE_9838_source.tar.gz",
+  "sha256": "173e6dc95b5e4228d07d307cd0a0f867fdb7a9648c933e52a1a95d51fd52c07e",
+  "bytes": 257238908,
+  "bakasu_url": "https://github.com/Baka-SU/BakaSU.git",
+  "bakasu_commit": "5b76b884c75f729a220bb317aa4a4fc78f0e0e9c",
+  "contents": [
+    "kernel/",
+    "root_git/"
+  ],
+  "kind": "source snapshot of shipped9838; excludes .git and build cache"
+}

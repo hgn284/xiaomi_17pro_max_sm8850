@@ -1,0 +1,3 @@
+obj-$(CONFIG_OS44_QPACE) += canoe_qpace.o qpace_crypto.o
+
+ccflags-y += -I$(src)/include -I$(src)/vendor-include -I$(src) -I$(srctree)

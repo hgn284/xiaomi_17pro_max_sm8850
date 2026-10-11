@@ -1,0 +1,9 @@
+config OS44_QPACE
+ bool "OS44 QPaCE standard translated DMA experiment"
+ depends on IOMMU_API && IOMMU_DMA && CRYPTO && INTERCONNECT && OF
+ depends on ARM64_4K_PAGES
+ select LZ4_COMPRESS
+ select LZ4_DECOMPRESS
+ help
+   Builtin driver/crypto; retains the original modular IOMMU registry.
+   Target routing/selftest and early zram selection are not yet accepted.

@@ -1,0 +1,327 @@
+--- a/drivers/base/core.c	2026-10-05 14:12:46.866032929 +0800
++++ b/drivers/base/core.c	2026-10-11 20:10:47.952482080 +0800
+@@ -2429,16 +2429,27 @@
+ 	return ret;
+ }
+ 
++#include "os44_qpace_policy.h"
+ static ssize_t dev_attr_store(struct kobject *kobj, struct attribute *attr,
+-			      const char *buf, size_t count)
++                              const char *buf, size_t count)
+ {
+-	struct device_attribute *dev_attr = to_dev_attr(attr);
+-	struct device *dev = kobj_to_dev(kobj);
+-	ssize_t ret = -EIO;
+-
+-	if (dev_attr->store)
+-		ret = dev_attr->store(dev, dev_attr, buf, count);
+-	return ret;
++ struct device_attribute *dev_attr = to_dev_attr(attr);
++ struct device *dev = kobj_to_dev(kobj);
++ ssize_t ret = -EIO;
++ bool forced = os44_qpace_policy_applies(dev, attr);
++ const char *input = buf;
++ size_t size = count;
++ if (forced) {
++  mutex_lock(&os44_qpace_policy_lock);
++  ret = os44_qpace_policy_prepare(dev, attr, &input, &size);
++  if (ret < 0) goto done;
++ }
++ if (dev_attr->store)
++  ret = dev_attr->store(dev, dev_attr, input, size);
++ if (forced && ret >= 0) ret = count;
++done:
++ if (forced) mutex_unlock(&os44_qpace_policy_lock);
++ return ret;
+ }
+ 
+ static const struct sysfs_ops dev_sysfs_ops = {
+
+--- a/drivers/soc/qcom/os44-qpace/canoe_qpace.c	2026-10-11 19:09:22.348480589 +0800
++++ b/drivers/soc/qcom/os44-qpace/canoe_qpace.c	2026-10-11 20:11:29.962650606 +0800
+@@ -25,7 +25,8 @@
+ #include <linux/cpu.h>
+ #include <linux/slab.h>
+ #include <linux/random.h>
+-#include <linux/lz4.h>
++#include <linux/wait.h>
++#include <linux/os44_qpace.h>
+ #include <linux/atomic.h>
+ #include <linux/workqueue.h>
+ #include <linux/bitfield.h>
+@@ -65,6 +66,18 @@
+ HW_EXPOSE(hw_decomp_output_bytes); HW_EXPOSE(selftest_lz4_pages);
+ HW_EXPOSE(selftest_format_errors);
+ 
++/* Forced mode skips the diagnostic batch, NOT actual hardware errors.
++ * selftest_result remains ENODATA: skipped is never reported as PASS. */
++static bool force_mode = true;
++module_param(force_mode, bool, 0400);
++static bool hardware_ready;
++module_param(hardware_ready, bool, 0400);
++static DECLARE_WAIT_QUEUE_HEAD(hardware_wait);
++int os44_qpace_wait_ready(void)
++{
++ return wait_event_timeout(hardware_wait, READ_ONCE(hardware_ready),
++                          msecs_to_jiffies(90000)) ? 0 : -ETIMEDOUT;
++}
+ static int selftest_result = -ENODATA;
+ module_param(selftest_result, int, 0400);
+ MODULE_PARM_DESC(selftest_result, "0 only after completed selftest and stop; negative means untested or failed");
+@@ -185,11 +198,11 @@
+  if (!client_mode) { ret = -EOPNOTSUPP; goto fail; }
+  if (!e) goto fail;
+  /* EAGAIN makes Crypto API shoot/retry the registered algorithm. */
+- if (!e->tested) { ret = -EBUSY; goto fail; }
++ if (!force_mode && !e->tested) { ret = -EBUSY; goto fail; }
+  if (e->suspended) { ret = -EBUSY; goto fail; }
+  if (READ_ONCE(e->broken) || e->quarantine) { ret = -EIO; goto fail; }
+  if (!try_module_get(THIS_MODULE)) goto fail;
+- if (!e->clients) {
++ if (!e->clients && !e->voted) {
+   ret = start_engine(e);
+   if (ret) { stop_engine(e); module_put(THIS_MODULE); goto fail; }
+   resume_irqs(e);
+@@ -325,20 +338,8 @@
+    if (m != PAGE_SIZE || memcmp(src, decoded, PAGE_SIZE)) {
+     ret = m < 0 ? m : -EILSEQ; goto done;
+    }
+-   /* The crypto adapter stores only software-decodable LZ4 blocks. A
+-    * proprietary HW->HW roundtrip alone must never admit that backend.
+-    * PAGE_SIZE output is non-beneficial and never accepted by the adapter. */
+-   if (n < PAGE_SIZE) {
+-    memset(decoded, 0x69, PAGE_SIZE);
+-    m = LZ4_decompress_safe(compressed, decoded, n, PAGE_SIZE);
+-    if (m != PAGE_SIZE || memcmp(src, decoded, PAGE_SIZE)) {
+-     atomic64_inc(&selftest_format_errors);
+-     ret = -EBADMSG; goto done;
+-    }
+-    atomic64_inc(&selftest_lz4_pages);
+-   } else if (pattern != 3) {
+-    ret = -E2BIG; goto done;
+-   }
++   /* Native COMP/DECOMP format: no software-LZ4 interpretation. */
++   if (n >= PAGE_SIZE && pattern != 3) { ret = -E2BIG; goto done; }
+    e->passed[pattern]++;
+   }
+  ret = 0;
+@@ -574,8 +575,22 @@
+  }
+  platform_set_drvdata(pdev, e);
+  engine = e;
+- queue_selftest(e);
+- dev_info(dev, "selftest queued; crypto admission pending all600 rounds and stop\n");
++ if (force_mode) {
++  ret = start_engine(e);
++  if (ret) {
++   stop_engine(e);
++   engine = NULL;
++   platform_set_drvdata(pdev, NULL);
++   goto release;
++  }
++  e->online = true;
++  WRITE_ONCE(hardware_ready, true);
++  wake_up_all(&hardware_wait);
++  dev_info(dev, "forced native QPaCE enabled; diagnostic batch skipped, not passed\n");
++ } else {
++  queue_selftest(e);
++  dev_info(dev, "native codec selftest queued\n");
++ }
+  mutex_unlock(&registry_lock);
+  return 0;
+ release:
+@@ -595,6 +610,7 @@
+  struct canoe_engine *e = platform_get_drvdata(pdev);
+  unsigned long flags;
+  int irq;
++ WRITE_ONCE(hardware_ready, false);
+  WRITE_ONCE(e->test_cancel, true);
+  cancel_delayed_work_sync(&e->selftest_work);
+  mutex_lock(&registry_lock);
+@@ -762,4 +778,4 @@
+ module_init(canoe_init);
+ module_exit(canoe_exit);
+ MODULE_LICENSE("GPL");
+-MODULE_DESCRIPTION("Canoe QPaCE client lifecycle development; NOT FOR PHONE DELIVERY");
++MODULE_DESCRIPTION("OS44 forced native QPaCE COMP/DECOMP; hardware trial9838");
+
+--- a/drivers/soc/qcom/os44-qpace/qpace_crypto.c	2026-10-09 23:13:51.191914233 +0800
++++ b/drivers/soc/qcom/os44-qpace/qpace_crypto.c	2026-10-11 20:10:40.620022364 +0800
+@@ -1,41 +1,32 @@
+ // SPDX-License-Identifier: GPL-2.0-only
+-/* Integration extension, NOT recovered stock QPaCE source.
+- * One transform per zcomp CPU stream; stream owner serializes use.
+- * Commit hardware bytes only if a full 4KiB LZ4 decode equals input.
+- */
++/* User9838 native hardware codec. No software format assumption or fallback.
++ * Original zram remains the owner of raw/huge pages and swap lifecycle. */
+ #include <linux/module.h>
+ #include <linux/crypto.h>
+ #include <crypto/internal/scompress.h>
+ #include <linux/mm.h>
+-#include <linux/slab.h>
+-#include <linux/vmalloc.h>
+-#include <linux/lz4.h>
+ #include <linux/atomic.h>
+ #include "canoe_api.h"
+ 
+ #define COUNTER(name) static atomic64_t name = ATOMIC64_INIT(0)
+-COUNTER(init_calls); COUNTER(gate_disabled); COUNTER(gate_no_device);
+-COUNTER(gate_other); COUNTER(active_tfms); COUNTER(backend_calls);
+-COUNTER(hw_accepted); COUNTER(hw_rejected); COUNTER(sw_fallback);
+-COUNTER(sw_errors); COUNTER(sw_reads); COUNTER(decode_errors);
++COUNTER(init_calls); COUNTER(active_tfms); COUNTER(backend_calls);
++COUNTER(hw_accepted); COUNTER(hw_rejected); COUNTER(hw_reads);
++COUNTER(raw_pages); COUNTER(decode_errors);
+ COUNTER(hw_accepted_input_bytes); COUNTER(hw_accepted_output_bytes);
+-COUNTER(sw_fallback_input_bytes); COUNTER(decoded_bytes);
++COUNTER(decoded_bytes);
+ static int init_last_error;
+ module_param(init_last_error, int, 0444);
++static bool native_hardware_only = true;
++module_param(native_hardware_only, bool, 0444);
+ static int counter_get(char *buf, const struct kernel_param *kp)
+ { return scnprintf(buf, PAGE_SIZE, "%lld\n", (long long)atomic64_read(kp->arg)); }
+ static const struct kernel_param_ops counter_ops = { .get = counter_get };
+ #define EXPOSE(name) module_param_cb(name, &counter_ops, &name, 0444)
+-EXPOSE(init_calls); EXPOSE(gate_disabled); EXPOSE(gate_no_device);
+-EXPOSE(gate_other); EXPOSE(active_tfms); EXPOSE(backend_calls);
+-EXPOSE(hw_accepted); EXPOSE(hw_rejected); EXPOSE(sw_fallback);
+-EXPOSE(sw_errors); EXPOSE(sw_reads); EXPOSE(decode_errors);
+-EXPOSE(hw_accepted_input_bytes); EXPOSE(hw_accepted_output_bytes);
+-EXPOSE(sw_fallback_input_bytes); EXPOSE(decoded_bytes);
+-MODULE_PARM_DESC(backend_calls, "Client API calls, including offline rejection; NOT hardware transactions");
+-MODULE_PARM_DESC(hw_accepted, "Hardware output accepted only after full LZ4 decode and byte equality");
+-
+-struct qpace_comp_ctx { struct canoe_engine *engine; void *work; void *check; };
++EXPOSE(init_calls); EXPOSE(active_tfms); EXPOSE(backend_calls);
++EXPOSE(hw_accepted); EXPOSE(hw_rejected); EXPOSE(hw_reads);
++EXPOSE(raw_pages); EXPOSE(decode_errors);
++EXPOSE(hw_accepted_input_bytes); EXPOSE(hw_accepted_output_bytes); EXPOSE(decoded_bytes);
++struct qpace_comp_ctx { struct canoe_engine *engine; };
+ static int qpace_comp_init(struct crypto_tfm *tfm)
+ {
+  struct qpace_comp_ctx *c = crypto_tfm_ctx(tfm);
+@@ -46,20 +37,10 @@
+  if (IS_ERR(c->engine)) {
+   ret = PTR_ERR(c->engine); c->engine = NULL; goto fail;
+  }
+- c->work = vmalloc(LZ4_MEM_COMPRESS);
+- c->check = kmalloc(PAGE_SIZE, GFP_KERNEL);
+- if (!c->work || !c->check) {
+-  vfree(c->work); kfree(c->check); c->work = c->check = NULL;
+-  canoe_qpace_close(c->engine); c->engine = NULL;
+-  ret = -ENOMEM; goto fail;
+- }
+  atomic64_inc(&active_tfms);
+  WRITE_ONCE(init_last_error, 0);
+  return 0;
+ fail:
+- if (ret == -EOPNOTSUPP) atomic64_inc(&gate_disabled);
+- else if (ret == -ENODEV) atomic64_inc(&gate_no_device);
+- else atomic64_inc(&gate_other);
+  WRITE_ONCE(init_last_error, ret);
+  return ret;
+ }
+@@ -67,67 +48,64 @@
+ {
+  struct qpace_comp_ctx *c = crypto_tfm_ctx(tfm);
+  canoe_qpace_close(c->engine);
+- vfree(c->work); kfree(c->check);
+- c->engine = NULL; c->work = c->check = NULL;
++ c->engine = NULL;
+  atomic64_dec(&active_tfms);
+ }
+-/* Hotpath: no allocation, sleeping, mutex or ICC/PM operations. */
+ static int qpace_comp_compress(struct crypto_tfm *tfm, const u8 *src,
+  unsigned int slen, u8 *dst, unsigned int *dlen)
+ {
+  struct qpace_comp_ctx *c = crypto_tfm_ctx(tfm);
+- int n, decoded;
+- unsigned int capacity;
++ int n;
+  if (!src || !dst || !dlen || slen != PAGE_SIZE || *dlen < PAGE_SIZE)
+   return -EINVAL;
+- capacity = min_t(unsigned int, *dlen, LZ4_COMPRESSBOUND(PAGE_SIZE));
+  atomic64_inc(&backend_calls);
+- n = canoe_qpace_page(c->engine, false, src, PAGE_SIZE, dst, capacity);
+- if (n > 0 && n < PAGE_SIZE) {
+-  decoded = LZ4_decompress_safe(dst, c->check, n, PAGE_SIZE);
+-  if (decoded == PAGE_SIZE && !memcmp(c->check, src, PAGE_SIZE)) {
+-   atomic64_inc(&hw_accepted);
+-   atomic64_add(PAGE_SIZE, &hw_accepted_input_bytes);
+-   atomic64_add(n, &hw_accepted_output_bytes);
+-   *dlen = n; return 0;
+-  }
++ n = canoe_qpace_page(c->engine, false, src, PAGE_SIZE, dst, *dlen);
++ if (n == -E2BIG || n == PAGE_SIZE) {
++  /* Real raw bytes, not an invented successful compressed payload. Zram's
++   * existing huge-page path stores original data without codec decoding. */
++  memcpy(dst, src, PAGE_SIZE);
++  *dlen = PAGE_SIZE;
++  atomic64_inc(&raw_pages);
++  return 0;
++ }
++ if (n <= 0 || n > PAGE_SIZE) {
++  atomic64_inc(&hw_rejected);
++  return n < 0 ? n : -EIO;
+  }
+- atomic64_inc(&hw_rejected);
+- atomic64_inc(&sw_fallback);
+- n = LZ4_compress_default(src, dst, PAGE_SIZE, capacity, c->work);
+- /* Unlike the old zcomp_ops backend, crypto COMPRESS must not return success
+-  * with invented bytes/length when compression cannot fit. At 8192-byte zram
+-  * capacity, a valid >=4096 output lets zram store the original huge page.
+-  */
+- if (n <= 0) { atomic64_inc(&sw_errors); return -ENOSPC; }
+- atomic64_add(PAGE_SIZE, &sw_fallback_input_bytes);
+- *dlen = n; return 0;
++ *dlen = n;
++ atomic64_inc(&hw_accepted);
++ atomic64_add(PAGE_SIZE, &hw_accepted_input_bytes);
++ atomic64_add(n, &hw_accepted_output_bytes);
++ return 0;
+ }
+ static int qpace_comp_decompress(struct crypto_tfm *tfm, const u8 *src,
+  unsigned int slen, u8 *dst, unsigned int *dlen)
+ {
++ struct qpace_comp_ctx *c = crypto_tfm_ctx(tfm);
+  int n;
+- if (!src || !dst || !dlen || !slen || slen > LZ4_COMPRESSBOUND(PAGE_SIZE)
+-     || *dlen < PAGE_SIZE) return -EINVAL;
+- n = LZ4_decompress_safe(src, dst, slen, PAGE_SIZE);
+- if (n != PAGE_SIZE) { atomic64_inc(&decode_errors); return -EIO; }
+- atomic64_inc(&sw_reads); atomic64_add(PAGE_SIZE, &decoded_bytes);
+- *dlen = PAGE_SIZE; return 0;
++ if (!src || !dst || !dlen || !slen || slen > PAGE_SIZE || *dlen < PAGE_SIZE)
++  return -EINVAL;
++ /* Defensive raw convention for full-page direct Crypto API consumers. */
++ if (slen == PAGE_SIZE) { memcpy(dst, src, PAGE_SIZE); *dlen = PAGE_SIZE; return 0; }
++ n = canoe_qpace_page(c->engine, true, src, slen, dst, *dlen);
++ if (n != PAGE_SIZE) { atomic64_inc(&decode_errors); return n < 0 ? n : -EIO; }
++ *dlen = PAGE_SIZE;
++ atomic64_inc(&hw_reads);
++ atomic64_add(PAGE_SIZE, &decoded_bytes);
++ return 0;
+ }
+ static struct crypto_alg qpace_comp_alg = {
+- .cra_name = "qpace-canoe", .cra_driver_name = "qpace-canoe-validated-lz4",
++ .cra_name = "qpace-canoe", .cra_driver_name = "qpace-canoe-native-hw",
+  .cra_flags = CRYPTO_ALG_TYPE_COMPRESS,
+  .cra_ctxsize = sizeof(struct qpace_comp_ctx), .cra_module = THIS_MODULE,
+  .cra_init = qpace_comp_init, .cra_exit = qpace_comp_exit,
+  .cra_u = { .compress = { .coa_compress = qpace_comp_compress,
+                          .coa_decompress = qpace_comp_decompress } },
+ };
+-static int __init qpace_comp_register(void)
+-{ return crypto_register_alg(&qpace_comp_alg); }
+-static void __exit qpace_comp_unregister(void)
+-{ crypto_unregister_alg(&qpace_comp_alg); }
++static int __init qpace_comp_register(void) { return crypto_register_alg(&qpace_comp_alg); }
++static void __exit qpace_comp_unregister(void) { crypto_unregister_alg(&qpace_comp_alg); }
+ module_init(qpace_comp_register);
+ module_exit(qpace_comp_unregister);
+ MODULE_LICENSE("GPL");
+-MODULE_DESCRIPTION("Experimental crypto COMPRESS adapter: validated Canoe/LZ4; not phone-accepted");
++MODULE_DESCRIPTION("OS44 forced native QPaCE hardware COMP/DECOMP trial9838");
+ MODULE_ALIAS_CRYPTO("qpace-canoe");

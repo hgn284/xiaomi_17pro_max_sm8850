@@ -1,0 +1,43 @@
+[
+  {
+    "name": "clang",
+    "url": "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86",
+    "commit": "77c95e8253c2c82ffd4fee92c0ad9f5ac1e8ca04",
+    "paths": [
+      "clang-r536225"
+    ]
+  },
+  {
+    "name": "rust",
+    "url": "https://android.googlesource.com/platform/prebuilts/rust",
+    "commit": "5c78b1e636b2bf68d46a6980437590fddca64147",
+    "paths": [
+      "linux-x86/1.82.0.p2"
+    ]
+  },
+  {
+    "name": "platform",
+    "url": "https://android.googlesource.com/platform/prebuilts/build-tools",
+    "commit": "574765b494f226284968a8d156437e4c932aad61",
+    "paths": [
+      "linux-x86",
+      "path/linux-x86"
+    ]
+  },
+  {
+    "name": "kernel",
+    "url": "https://android.googlesource.com/kernel/prebuilts/build-tools",
+    "commit": "811c6e2938d53b3c318d7635b03931601a68c765",
+    "paths": [
+      "linux-x86"
+    ]
+  },
+  {
+    "name": "clang_tools",
+    "url": "https://android.googlesource.com/platform/prebuilts/clang-tools",
+    "commit": "c03d5bc912878cdcbdc38fcb003e94116b978956",
+    "paths": [
+      "linux-x86"
+    ]
+  }
+]

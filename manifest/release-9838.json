@@ -1,0 +1,18 @@
+{
+  "device": "Xiaomi17ProMax/popsicle/SM8850",
+  "system": "OS4.0.0.44.XPBCNXM",
+  "tag": "os44-qpace-force-9838",
+  "Image_sha256": "c83901884e681204e321379c263035311fcaf9108029758351cb883d74689bbe",
+  "boot_sha256": "e83011647c89ac079119c26b1215ea1136842cdcbf56fd113a6d74539efbfe63",
+  "flash_zip_sha256": "00de4d1a428f6d51be3449204f0c97da083fe497b35cd42aafda46d0e5cc5ab8",
+  "BakaSU": 35222,
+  "SUSFS": "2.3.0",
+  "user_feedback": "Normal boot and currently running; monitoring shows active qpace-canoe zram16384MB/~3516MB used",
+  "full_vendor_source_complete": false,
+  "hardware_long_term_validated": false,
+  "next_capacity_mapping_included": false,
+  "publication_new_builds": 0,
+  "publication_new_tests": 0,
+  "source_manifest": "source.json",
+  "reference_format": "https://github.com/cctv18/oppo_oplus_realme_sm8850"
+}

@@ -1,0 +1,30 @@
+name: Build Xiaomi 17 Pro Max
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xiaomi17promax-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev zlib1g-dev python3-venv git curl xz-utils
+      - name: Build frozen OS44 source
+        env:
+          JOBS: 2
+        run: bash local/builder_6.12.69.sh
+      - name: Upload Image and build metadata
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: popsicle-os44-qpace-build
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
